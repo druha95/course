@@ -4,10 +4,10 @@
 #include <omp.h>
 #include <mpi.h>
 
-#include "./lib/matrix.h"   //kroosh tridiagonal solver
-#include "./lib/omp.h"      //kroosh tridiagonal parallel solver
+#include "./lib/matrix.h"   
+#include "./lib/omp.h"      
 
-#define A_DIFF 1.0       //vmykh   
+#define A_DIFF 1.0         
 #define A_FUNC 1.0
 #define B_FUNC 1.0
 
@@ -37,7 +37,8 @@
 #define T_STEP (MAX_SIGMA * X_STEP * X_STEP)
 #define T_POINTS_AMOUNT (int) ((T_MAX - T_MIN) / T_STEP)
 
-#define ALPHA (A_DIFF / (X_STEP * X_STEP))
+#define SIGMAS (T_STEP/X_STEP)
+#define KSI (T_STEP/(X_STEP*X_STEP))
 
 double** create_matrix(int N, int M);
 double exact_solution_func(double x, double t);
@@ -253,34 +254,29 @@ void write_matrix_to_file(double** matrix)
 
 double previous_partial_derivative(double** matrix, int i, int j)
 {
-	return ALPHA * (square(matrix[j][i]) - matrix[j][i] * matrix[j][i+1] + matrix[j][i] * matrix[j][i - 1]);
+	return 6* SIGMAS * (square(matrix[j][i])*matrix[j][i-1]) - 6*SIGMAS*(square(matrix[j][i])*matrix[j][i+1]) + KSI*(matrix[j][i] * matrix[j][i] * matrix[j][i]);
 }
 
 double current_partial_derivative(double** matrix, int i, int j)
 {
-	return 2 * ALPHA * matrix[j][i] * matrix[j][i - 1] - 6.0 * ALPHA * square(matrix[j][i]) +
-			2.0 * ALPHA * matrix[j][i] * matrix[j][i+1] + 
-
-			0.5 * ALPHA * square(matrix[j][i+1]) - ALPHA * matrix[j][i+1] * matrix[j][i-1] + 
-			0.5 * ALPHA * square(matrix[j][i-1])   
-
-			- 1 / T_STEP;
+	return 6*SIGMAS*(matrix[j][i] * square(matrix[j][i+1])) 
+  - 12*SIGMAS*(matrix[j][i]*matrix[j][i+1]*matrix[j][i-1]) 
+  + 6*SIGMAS*(matrix[j][i]*square(matrix[j][i-1])) 
+  + 3 * KSI*(square(matrix[j][i])*matrix[j][i-1]) 
+  - 8*KSI*(matrix[j][i]*matrix[j][i]*matrix[j][i]) 
+  + 3*KSI*(square(matrix[j][i])*matrix[j][i+1]) - 1;
 }
 
 double next_partial_derivative(double** matrix, int i, int j)
 {
-	return ALPHA * square(matrix[j][i]) + ALPHA * matrix[j][i] * matrix[j][i+1] - ALPHA * matrix[j][i] * matrix[j][i-1];
+	return 6* SIGMAS * (square(matrix[j][i])*matrix[j][i+1]) - 6*SIGMAS*(square(matrix[j][i])*matrix[j][i-1]) + KSI*(matrix[j][i] * matrix[j][i] * matrix[j][i]);
 }
 
 double finite_difference_function(double** matrix, int i, int j)
 {
-	return ALPHA * ( square(matrix[j][i]) * matrix[j][i-1] - 2.0 * cube(matrix[j][i]) + square(matrix[j][i]) * matrix[j][i+1] )
-
-
-	+ 0.5 * ALPHA * (  matrix[j][i] * square(matrix[j][i+1]) - 2.0 * matrix[j][i] * matrix[j][i+1] * matrix[j][i-1] 
-		+ matrix[j][i] * square(matrix[j][i-1])  )
-
-	-( matrix[j][i]/ T_STEP ) + matrix[j-1][i] / T_STEP;
+	return 3*SIGMAS*(square(matrix[j][i])*square(matrix[j][i+1])) - 6*SIGMAS*(square(matrix[j][i])*matrix[j][i+1]*matrix[j][i-1]) 
+  + 3*SIGMAS*(square(matrix[j][i])*square(matrix[j][i-1])) + KSI*(square(matrix[j][i])*matrix[j][i]*matrix[j][i-1])
+  - 2*KSI*(square(matrix[j][i])*square(matrix[j][i])) + KSI*(square(matrix[j][i])*matrix[j][i+1]) + matrix[j-1][i] - matrix[j][i];
 }
 
 int is_finish_condition(double* v1, double* v2, int size)
